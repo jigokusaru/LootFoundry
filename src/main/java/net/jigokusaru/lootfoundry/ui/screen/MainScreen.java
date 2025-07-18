@@ -79,7 +79,6 @@ public class MainScreen extends AbstractContainerScreen<MainMenu> {
             // This sends the packet to the server. The server will log a message,
             // confirming the button is wired up correctly.
             PacketDistributor.sendToServer(new OpenMenuC2SPacket(MenuType.OPTIONS, null));
-            this.minecraft.player.displayClientMessage(Component.literal("Options screen not implemented!"), true);
         }).bounds(rightX, row2Y, halfWidth, 20).build());
 
 

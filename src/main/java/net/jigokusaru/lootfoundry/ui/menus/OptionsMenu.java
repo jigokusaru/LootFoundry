@@ -1,21 +1,21 @@
 package net.jigokusaru.lootfoundry.ui.menus;
 
 import net.jigokusaru.lootfoundry.LootFoundry;
-// IMPORTANT: Change the imports to use your existing session class
 import net.jigokusaru.lootfoundry.data.LootBagCreationSession;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.RegistryFriendlyByteBuf; // <-- Add this import
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.ItemStack;
 
 public class OptionsMenu extends AbstractContainerMenu {
-    // Use the correct session class
     public final LootBagCreationSession session;
 
     // CLIENT constructor: Reconstructs the session from the network buffer
     public OptionsMenu(int windowId, Inventory playerInventory, FriendlyByteBuf extraData) {
-        this(windowId, playerInventory, LootBagCreationSession.fromBuffer(extraData));
+        // THE FIX: Cast the generic buffer to the required RegistryFriendlyByteBuf.
+        this(windowId, playerInventory, LootBagCreationSession.fromBuffer((RegistryFriendlyByteBuf) extraData));
     }
 
     // SERVER constructor: Receives the session directly

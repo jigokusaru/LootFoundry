@@ -1,7 +1,6 @@
 package net.jigokusaru.lootfoundry.ui.screen;
 
 import com.google.common.collect.Lists;
-import net.minecraft.SharedConstants;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
@@ -23,32 +22,23 @@ public class AutoCompleteEditBox extends EditBox {
     private int selectedSuggestion = -1;
     private int scrollOffset = 0;
     private final int maxSuggestionsInView = 5;
+    private int lastRenderedSuggestionCount = 0;
 
     public AutoCompleteEditBox(Font font, int x, int y, int width, int height, Component message, Function<String, List<String>> suggestionProvider) {
         super(font, x, y, width, height, message);
         this.font = font;
         this.suggestionProvider = suggestionProvider;
-        // The main responder now calls both the internal logic for suggestions and any external listener.
         super.setResponder(s -> {
             this.updateSuggestions();
             if (this.valueListener != null) {
                 this.valueListener.accept(s);
             }
         });
-        System.out.println("[AutoCompleteEditBox] CONSTRUCTOR CALLED for: " + message.getString());
-        // Manually trigger suggestions for the initial (likely empty) value, as the responder isn't set
-        // when the super constructor calls setValue.
         this.updateSuggestions();
     }
 
     public void setValueListener(Consumer<String> listener) {
         this.valueListener = listener;
-    }
-
-    @Override
-    public void setValue(String value) {
-        System.out.println("[AutoCompleteEditBox] SETVALUE CALLED with: \"" + value + "\"");
-        super.setValue(value);
     }
 
     private void updateSuggestions() {
@@ -69,25 +59,46 @@ public class AutoCompleteEditBox extends EditBox {
     @Override
     public void renderWidget(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
         super.renderWidget(guiGraphics, mouseX, mouseY, partialTick);
+    }
 
+    public void renderSuggestions(GuiGraphics guiGraphics, int availableHeight) {
         if (this.isSuggestionBoxOpen) {
             int boxX = this.getX();
             int boxY = this.getY() + this.height + 2;
             int boxWidth = this.getWidth();
-            int suggestionCount = Math.min(this.suggestions.size(), this.maxSuggestionsInView);
-            int boxHeight = suggestionCount * (this.font.lineHeight + 2);
 
-            guiGraphics.fill(boxX, boxY, boxX + boxWidth, boxY + boxHeight, 0xC0101010);
+            if (this.suggestions.isEmpty()) {
+                this.lastRenderedSuggestionCount = 0;
+                return;
+            }
+
+            int singleEntryHeight = this.font.lineHeight + 2;
+            int maxPossibleInView = Math.max(0, availableHeight / singleEntryHeight);
+            int suggestionCount = Math.min(this.suggestions.size(), Math.min(this.maxSuggestionsInView, maxPossibleInView));
+            this.lastRenderedSuggestionCount = suggestionCount;
+
+            if (suggestionCount <= 0) {
+                return;
+            }
+
+            int boxHeight = suggestionCount * singleEntryHeight;
+            int backgroundColor = 0xFF101010;
+            int borderColor = 0xFF909090;
+
+            guiGraphics.fill(boxX - 1, boxY - 1, boxX + boxWidth + 1, boxY + boxHeight + 1, borderColor);
+            guiGraphics.fill(boxX, boxY, boxX + boxWidth, boxY + boxHeight, backgroundColor);
 
             for (int i = 0; i < suggestionCount; i++) {
                 int suggestionIndex = i + this.scrollOffset;
                 if (suggestionIndex < this.suggestions.size()) {
                     String suggestion = this.suggestions.get(suggestionIndex);
-                    int entryY = boxY + i * (this.font.lineHeight + 2);
-                    int color = (suggestionIndex == this.selectedSuggestion) ? 0xFFFFFF00 : 0xFFE0E0E0; // Highlight yellow
+                    int entryY = boxY + i * singleEntryHeight;
+                    int color = (suggestionIndex == this.selectedSuggestion) ? 0xFFFFFF00 : 0xFFE0E0E0;
                     guiGraphics.drawString(this.font, suggestion, boxX + 2, entryY + 2, color);
                 }
             }
+        } else {
+            this.lastRenderedSuggestionCount = 0;
         }
     }
 
@@ -118,12 +129,11 @@ public class AutoCompleteEditBox extends EditBox {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (this.isSuggestionBoxOpen) {
+        if (this.isSuggestionBoxOpen && this.lastRenderedSuggestionCount > 0) {
             int boxX = this.getX();
             int boxY = this.getY() + this.height + 2;
             int boxWidth = this.getWidth();
-            int suggestionCount = Math.min(this.suggestions.size(), this.maxSuggestionsInView);
-            int boxHeight = suggestionCount * (this.font.lineHeight + 2);
+            int boxHeight = this.lastRenderedSuggestionCount * (this.font.lineHeight + 2);
 
             if (mouseX >= boxX && mouseX < boxX + boxWidth && mouseY >= boxY && mouseY < boxY + boxHeight) {
                 int clickedIndex = (int) ((mouseY - boxY) / (this.font.lineHeight + 2)) + this.scrollOffset;
@@ -156,7 +166,7 @@ public class AutoCompleteEditBox extends EditBox {
     }
 
     private void ensureVisible(int index) {
-        if(index == -1) return;
+        if (index == -1) return;
         if (index < this.scrollOffset) {
             this.scrollOffset = index;
         } else if (index >= this.scrollOffset + this.maxSuggestionsInView) {
