@@ -5,14 +5,17 @@ import net.jigokusaru.lootfoundry.data.LootBagCreationSession;
 import net.jigokusaru.lootfoundry.data.LootBagDataManager;
 import net.jigokusaru.lootfoundry.network.MenuType;
 // These next two imports will still show an error. We will fix this in the very next step.
+import net.jigokusaru.lootfoundry.ui.menus.OptionsMenu;
 import net.jigokusaru.lootfoundry.ui.provider.LootMenuProvider;
 import net.jigokusaru.lootfoundry.ui.provider.MainMenuProvider;
 import net.minecraft.network.FriendlyByteBuf; // <-- Add this import
 import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.SimpleMenuProvider;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 import org.jetbrains.annotations.Nullable;
 
@@ -62,13 +65,23 @@ public record OpenMenuC2SPacket(MenuType menuType, @Nullable String bagId) imple
             if (player == null) return;
 
             LootBagDataManager dataManager = LootBagDataManager.getInstance();
-
             LootBagCreationSession session = dataManager.getOrCreatePlayerSession(player);
 
             switch (this.menuType) {
                 case MAIN -> player.openMenu(new MainMenuProvider(session), session::writeToBuffer);
                 case LOOT_EDITOR -> player.openMenu(new LootMenuProvider(session), session::writeToBuffer);
-                case OPTIONS -> LootFoundry.LOGGER.info("Options menu requested (not implemented).");
+
+                // REPLACE THE OLD 'OPTIONS' CASE WITH THIS:
+                case OPTIONS -> {
+                    // This creates a MenuProvider on the fly. It tells the server HOW to create
+                    // the OptionsMenu and what its title should be.
+                    var menuProvider = new SimpleMenuProvider(
+                            (id, inv, p) -> new OptionsMenu(id, inv, session),
+                            Component.literal("Loot Foundry Options")
+                    );
+                    // This opens the menu and sends the session data to the client.
+                    player.openMenu(menuProvider, session::writeToBuffer);
+                }
             }
         });
     }
