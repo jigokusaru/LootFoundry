@@ -13,7 +13,7 @@ public class LootBagCreationSession {
     private String bagId;
     private final List<LootEntry> lootEntries;
 
-    // --- NEW OPTION FIELDS ---
+    // --- OPTION FIELDS ---
     private int minRolls;
     private int maxRolls;
     private boolean uniqueRolls;
@@ -23,6 +23,7 @@ public class LootBagCreationSession {
     private boolean consumedOnUse;
     private int cooldownSeconds;
     private boolean showContents;
+    private String customModelId;
 
     // Main constructor for new sessions
     public LootBagCreationSession(Player player) {
@@ -30,8 +31,6 @@ public class LootBagCreationSession {
         this.bagName = "New Loot Bag";
         this.bagId = "new_loot_bag";
         this.lootEntries = new ArrayList<>();
-
-        // --- Set default values for new options ---
         this.minRolls = 1;
         this.maxRolls = 1;
         this.uniqueRolls = true;
@@ -41,17 +40,34 @@ public class LootBagCreationSession {
         this.consumedOnUse = true;
         this.cooldownSeconds = 0;
         this.showContents = false;
+        // --- THE FIX: Default to an empty string to signify no custom model. ---
+        this.customModelId = "";
     }
 
-    // Private constructor used for deserialization from network
-    private LootBagCreationSession(UUID owner, String bagName, String bagId, List<LootEntry> entries,
-                                   int minRolls, int maxRolls, boolean uniqueRolls,
-                                   LootDistributionMethod distributionMethod, String soundEvent, String openMessage,
-                                   boolean consumedOnUse, int cooldownSeconds, boolean showContents) {
+    // Constructor for loading from a definition
+    public LootBagCreationSession(Player player, LootBagDefinition definition) {
+        this.owner = player.getUUID();
+        this.bagName = definition.getBagName();
+        this.bagId = definition.getBagId();
+        this.lootEntries = new ArrayList<>(definition.getLootEntries());
+        this.minRolls = definition.getMinRolls();
+        this.maxRolls = definition.getMaxRolls();
+        this.uniqueRolls = definition.isUniqueRolls();
+        this.distributionMethod = definition.getDistributionMethod();
+        this.soundEvent = definition.getSoundEvent();
+        this.openMessage = definition.getOpenMessage();
+        this.consumedOnUse = definition.isConsumedOnUse();
+        this.cooldownSeconds = definition.getCooldownSeconds();
+        this.showContents = definition.isShowContents();
+        this.customModelId = definition.getCustomModelId();
+    }
+
+    // --- Private constructor for network deserialization ---
+    private LootBagCreationSession(UUID owner, String bagName, String bagId, List<LootEntry> lootEntries, int minRolls, int maxRolls, boolean uniqueRolls, LootDistributionMethod distributionMethod, String soundEvent, String openMessage, boolean consumedOnUse, int cooldownSeconds, boolean showContents, String customModelId) {
         this.owner = owner;
         this.bagName = bagName;
         this.bagId = bagId;
-        this.lootEntries = entries;
+        this.lootEntries = lootEntries;
         this.minRolls = minRolls;
         this.maxRolls = maxRolls;
         this.uniqueRolls = uniqueRolls;
@@ -61,19 +77,16 @@ public class LootBagCreationSession {
         this.consumedOnUse = consumedOnUse;
         this.cooldownSeconds = cooldownSeconds;
         this.showContents = showContents;
+        this.customModelId = customModelId;
     }
 
-    // --- Getters and Setters for all fields ---
-    // (Existing getters/setters for bagName, bagId, lootEntries...)
+    // --- Getters and Setters ---
     public UUID getOwner() { return owner; }
     public String getBagName() { return bagName; }
-    public String getBagId() { return bagId; }
     public void setBagName(String bagName) { this.bagName = bagName; }
+    public String getBagId() { return bagId; }
     public void setBagId(String bagId) { this.bagId = bagId; }
     public List<LootEntry> getLootEntries() { return lootEntries; }
-    // ... (add, remove, update loot entries) ...
-
-    // --- New getters and setters for options ---
     public int getMinRolls() { return minRolls; }
     public void setMinRolls(int minRolls) { this.minRolls = minRolls; }
     public int getMaxRolls() { return maxRolls; }
@@ -92,41 +105,83 @@ public class LootBagCreationSession {
     public void setCooldownSeconds(int cooldownSeconds) { this.cooldownSeconds = cooldownSeconds; }
     public boolean isShowContents() { return showContents; }
     public void setShowContents(boolean showContents) { this.showContents = showContents; }
-    
+    public String getCustomModelId() { return customModelId; }
+    public void setCustomModelId(String customModelId) { this.customModelId = customModelId; }
+
+    /**
+     * Adds a new loot entry to this session's list.
+     * @param entry The LootEntry to add.
+     */
+    public void addLootEntry(LootEntry entry) {
+        if (entry != null) {
+            this.lootEntries.add(entry);
+        }
+    }
+
+    /**
+     * Removes a loot entry from this session's list by its unique ID.
+     * @param entryId The UUID of the LootEntry to remove.
+     */
+    public void removeLootEntry(UUID entryId) {
+        if (entryId != null) {
+            // Use removeIf for a concise way to find and remove the matching entry.
+            this.lootEntries.removeIf(entry -> entryId.equals(entry.getId()));
+        }
+    }
+
+    /**
+     * Finds an existing loot entry by its ID and replaces it with an updated version.
+     * @param updatedEntry The new LootEntry object that will replace the old one.
+     */
+    public void updateLootEntry(LootEntry updatedEntry) {
+        if (updatedEntry == null) {
+            return;
+        }
+        UUID idToUpdate = updatedEntry.getId();
+        for (int i = 0; i < this.lootEntries.size(); i++) {
+            if (this.lootEntries.get(i).getId().equals(idToUpdate)) {
+                this.lootEntries.set(i, updatedEntry);
+                // We found the entry and updated it, so we can exit the loop.
+                break;
+            }
+        }
+    }
+
+    /**
+     * Writes the entire session state to a buffer to be sent to the client.
+     * This is used when opening a menu screen.
+     */
     public void writeToBuffer(RegistryFriendlyByteBuf buffer) {
         buffer.writeUUID(this.owner);
-        buffer.writeUtf(this.bagName);
-        buffer.writeUtf(this.bagId);
+        // --- FIX: Add null checks to all string writes to prevent crashes ---
+        buffer.writeUtf(this.bagName != null ? this.bagName : "New Loot Bag");
+        buffer.writeUtf(this.bagId != null ? this.bagId : "new_loot_bag");
 
-        buffer.writeVarInt(this.lootEntries.size());
-        for (LootEntry entry : this.lootEntries) {
-            entry.writeToBuffer(buffer);
-        }
+        buffer.writeCollection(this.lootEntries, (buf, entry) -> entry.writeToBuffer((RegistryFriendlyByteBuf) buf));
 
-        // --- Write new options to buffer ---
         buffer.writeVarInt(minRolls);
         buffer.writeVarInt(maxRolls);
         buffer.writeBoolean(uniqueRolls);
         buffer.writeEnum(distributionMethod);
-        buffer.writeUtf(soundEvent);
-        buffer.writeUtf(openMessage);
+
+        buffer.writeUtf(this.soundEvent != null ? this.soundEvent : "");
+        buffer.writeUtf(this.openMessage != null ? this.openMessage : "");
+
         buffer.writeBoolean(consumedOnUse);
         buffer.writeVarInt(cooldownSeconds);
         buffer.writeBoolean(showContents);
+
+        buffer.writeUtf(this.customModelId != null ? this.customModelId : "");
     }
 
+    /**
+     * Reconstructs a session object from a buffer on the client side.
+     */
     public static LootBagCreationSession fromBuffer(RegistryFriendlyByteBuf buffer) {
         UUID owner = buffer.readUUID();
         String bagName = buffer.readUtf();
         String bagId = buffer.readUtf();
-
-        int size = buffer.readVarInt();
-        List<LootEntry> entries = new ArrayList<>(size);
-        for (int i = 0; i < size; i++) {
-            entries.add(LootEntry.fromBuffer(buffer));
-        }
-
-        // --- Read new options from buffer ---
+        List<LootEntry> entries = buffer.readCollection(ArrayList::new, (buf) -> LootEntry.fromBuffer((RegistryFriendlyByteBuf) buf));
         int minRolls = buffer.readVarInt();
         int maxRolls = buffer.readVarInt();
         boolean uniqueRolls = buffer.readBoolean();
@@ -136,20 +191,9 @@ public class LootBagCreationSession {
         boolean consumedOnUse = buffer.readBoolean();
         int cooldownSeconds = buffer.readVarInt();
         boolean showContents = buffer.readBoolean();
+        String customModelId = buffer.readUtf();
 
         return new LootBagCreationSession(owner, bagName, bagId, entries, minRolls, maxRolls, uniqueRolls,
-                distributionMethod, soundEvent, openMessage, consumedOnUse, cooldownSeconds, showContents);
-    }
-
-    // Existing add/remove/update LootEntry methods...
-    public void addLootEntry(LootEntry entry) { this.lootEntries.add(entry); }
-    public void removeLootEntry(UUID entryId) { this.lootEntries.removeIf(entry -> entry.getId().equals(entryId)); }
-    public void updateLootEntry(LootEntry updatedEntry) {
-        for (int i = 0; i < this.lootEntries.size(); i++) {
-            if (this.lootEntries.get(i).getId().equals(updatedEntry.getId())) {
-                this.lootEntries.set(i, updatedEntry);
-                return;
-            }
-        }
+                distributionMethod, soundEvent, openMessage, consumedOnUse, cooldownSeconds, showContents, customModelId);
     }
 }

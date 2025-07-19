@@ -1,7 +1,23 @@
 package net.jigokusaru.lootfoundry.data;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import net.jigokusaru.lootfoundry.LootFoundry;
+import net.jigokusaru.lootfoundry.util.ItemStackAdapter;
+import net.jigokusaru.lootfoundry.util.LootEntryAdapterFactory;
+import net.jigokusaru.lootfoundry.util.OptionalTypeAdapter;
+import net.minecraft.ChatFormatting;
+import net.minecraft.core.RegistryAccess;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.storage.LevelResource;
 
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.Writer;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -12,57 +28,83 @@ import java.util.concurrent.ConcurrentHashMap;
  * and cleaned up properly.
  */
 public class LootBagDataManager {
-    // The single instance of this manager for the entire server.
     private static final LootBagDataManager INSTANCE = new LootBagDataManager();
-
-    // A thread-safe map that links a player's unique ID to their active creation session.
     private final Map<UUID, LootBagCreationSession> playerSessions = new ConcurrentHashMap<>();
 
-    // Private constructor to enforce the singleton pattern.
     private LootBagDataManager() {}
 
-    /**
-     * Gets the singleton instance of the data manager.
-     */
     public static LootBagDataManager getInstance() {
         return INSTANCE;
     }
 
-    /**
-     * The core logic for session management.
-     * Gets the existing session for a player, or creates and stores a new one if none exists.
-     * This prevents a player's work from being accidentally discarded while they are in the UI.
-     *
-     * @param player The player requesting a session.
-     * @return The player's active LootBagCreationSession.
-     */
     public LootBagCreationSession getOrCreatePlayerSession(ServerPlayer player) {
-        // THE FIX: Pass the 'player' object to the constructor, as it is required.
         return this.playerSessions.computeIfAbsent(player.getUUID(), (uuid) -> new LootBagCreationSession(player));
     }
 
+    // --- START OF FIX ---
     /**
-     * Ends a player's session, discarding any unsaved work.
-     * This is called when a player clicks "Save", "Discard", or logs out.
-     *
-     * @param player The player whose session should be ended.
+     * Creates a new, blank session for a player, overwriting any existing session.
+     * This is used by the /lf create command.
+     * @param player The player who will be creating a new bag.
+     * @return The newly created blank session.
      */
+    public LootBagCreationSession startNewCreationSession(ServerPlayer player) {
+        LootBagCreationSession session = new LootBagCreationSession(player);
+        this.playerSessions.put(player.getUUID(), session);
+        return session;
+    }
+    // --- END OF FIX ---
+
+    /**
+     * Creates a new session for a player based on a loaded definition, replacing any existing session.
+     * @param player The player who will be editing.
+     * @param definition The loaded loot bag data.
+     * @return The newly created session.
+     */
+    public LootBagCreationSession startEditingSession(ServerPlayer player, LootBagDefinition definition) {
+        LootBagCreationSession session = new LootBagCreationSession(player, definition);
+        this.playerSessions.put(player.getUUID(), session);
+        return session;
+    }
+
     public void endPlayerSession(ServerPlayer player) {
         this.playerSessions.remove(player.getUUID());
     }
 
-    /**
-     * A placeholder for the logic that will save the session to a JSON file.
-     * @param player The player whose session is to be saved.
-     */
     public void saveSessionAsNewBag(ServerPlayer player) {
         LootBagCreationSession session = this.playerSessions.get(player.getUUID());
-        if (session != null && session.getBagId() != null) {
-            // TODO: Implement the logic to serialize the 'session' object to a JSON file
-            // using a library like Gson. The file would be saved in the world's config folder.
-            System.out.println("Saving bag: " + session.getBagId());
+        if (session == null || session.getBagId() == null || session.getBagId().isBlank()) {
+            player.sendSystemMessage(Component.literal("Cannot save: Bag has no name/ID.").withStyle(ChatFormatting.RED));
+            return;
+        }
 
-            // After saving, the session is complete and should be ended.
+        LootBagDefinition definition = new LootBagDefinition(session);
+
+        RegistryAccess registryAccess = player.getServer().registryAccess();
+        Gson gson = new GsonBuilder()
+                .setPrettyPrinting()
+                .registerTypeAdapterFactory(OptionalTypeAdapter.FACTORY)
+                .registerTypeAdapter(ItemStack.class, new ItemStackAdapter(registryAccess))
+                .registerTypeAdapterFactory(new LootEntryAdapterFactory())
+                .create();
+
+        try {
+            Path worldDir = player.getServer().getWorldPath(LevelResource.ROOT);
+            Path dataDir = worldDir.resolve("data").resolve(LootFoundry.MODID).resolve("bags");
+
+            Files.createDirectories(dataDir);
+            Path filePath = dataDir.resolve(definition.getBagId() + ".json");
+
+            try (Writer writer = new FileWriter(filePath.toFile())) {
+                gson.toJson(definition, writer);
+                LootFoundry.LOGGER.info("Successfully saved loot bag: {}", filePath);
+                player.sendSystemMessage(Component.literal("Loot bag '" + definition.getBagName() + "' saved.").withStyle(ChatFormatting.GREEN));
+            }
+
+        } catch (Throwable e) {
+            LootFoundry.LOGGER.error("Failed to save loot bag for player {} due to a critical error.", player.getGameProfile().getName(), e);
+            player.sendSystemMessage(Component.literal("Error: Failed to save loot bag! Check logs for a critical error.").withStyle(ChatFormatting.RED));
+        } finally {
             endPlayerSession(player);
         }
     }

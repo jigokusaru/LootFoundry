@@ -16,24 +16,29 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.neoforged.neoforge.network.PacketDistributor;
 
+import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class OptionsScreen extends AbstractContainerScreen<OptionsMenu> {
-    private static final ResourceLocation TEXTURE = ResourceLocation.fromNamespaceAndPath(LootFoundry.MODID, "textures/gui/options_menu_gui_tall.png");
-
     private EditBox minRollsField;
     private EditBox maxRollsField;
     private AutoCompleteEditBox soundEventField;
     private EditBox openMessageField;
     private EditBox cooldownField;
+    private AutoCompleteEditBox customModelIdField; // Renamed
+    private ItemStack previewItemStack; // Changed from ResourceLocation to ItemStack
 
     public OptionsScreen(OptionsMenu pMenu, Inventory pPlayerInventory, Component pTitle) {
         super(pMenu, pPlayerInventory, pTitle);
         this.imageWidth = 176;
-        this.imageHeight = 272;
+        this.imageHeight = 302;
         this.titleLabelY = 6;
     }
 
@@ -73,6 +78,18 @@ public class OptionsScreen extends AbstractContainerScreen<OptionsMenu> {
 
         openMessageField = createTextField(x + 8, y + 214, this.menu.session.getOpenMessage());
 
+        // --- MODEL ID FIELD WITH ITEM PREVIEW ---
+        customModelIdField = new AutoCompleteEditBox(
+                this.font, x + 8, y + 244, 136, 20, Component.empty(),
+                this::getModelIdSuggestions
+        );
+        customModelIdField.setValue(this.menu.session.getCustomModelId());
+        customModelIdField.setValueListener(path -> {
+            updateModelPreview(path); // Update the visual preview
+            sendUpdatePacket();       // Then send the data to the server
+        });
+        updateModelPreview(customModelIdField.getValue()); // Set initial preview on screen load
+
         cooldownField.setVisible(!this.menu.session.isConsumedOnUse());
 
         this.addRenderableWidget(minRollsField);
@@ -80,9 +97,95 @@ public class OptionsScreen extends AbstractContainerScreen<OptionsMenu> {
         this.addRenderableWidget(cooldownField);
         this.addRenderableWidget(soundEventField);
         this.addRenderableWidget(openMessageField);
+        this.addRenderableWidget(customModelIdField);
 
         this.addRenderableWidget(Button.builder(Component.literal("Done"), b -> this.onClose())
-                .bounds(x + 8, y + 244, 160, 20).build());
+                .bounds(x + 8, y + 274, 160, 20).build());
+    }
+
+    private List<String> getModelIdSuggestions(String currentText) {
+        return BuiltInRegistries.ITEM.keySet().stream()
+                .map(ResourceLocation::toString)
+                .filter(s -> s.contains(currentText))
+                .sorted()
+                .collect(Collectors.toList());
+    }
+
+    private void updateModelPreview(String modelId) {
+        this.previewItemStack = new ItemStack(Items.BARRIER); // Default to barrier if invalid
+        if (modelId == null || modelId.isBlank()) {
+            return;
+        }
+
+        ResourceLocation modelRl = ResourceLocation.tryParse(modelId);
+        if (modelRl != null) {
+            Optional<Item> itemOpt = BuiltInRegistries.ITEM.getOptional(modelRl);
+            itemOpt.ifPresent(item -> this.previewItemStack = new ItemStack(item));
+        }
+    }
+
+    private void sendUpdatePacket() {
+        try { this.menu.session.setMinRolls(Integer.parseInt(minRollsField.getValue())); } catch (NumberFormatException ignored) {}
+        try { this.menu.session.setMaxRolls(Integer.parseInt(maxRollsField.getValue())); } catch (NumberFormatException ignored) {}
+        try { this.menu.session.setCooldownSeconds(Integer.parseInt(cooldownField.getValue())); } catch (NumberFormatException ignored) {}
+        this.menu.session.setSoundEvent(soundEventField.getValue());
+        this.menu.session.setOpenMessage(openMessageField.getValue());
+        this.menu.session.setCustomModelId(customModelIdField.getValue()); // Renamed
+
+        LootBagCreationSession s = this.menu.session;
+        PacketDistributor.sendToServer(new UpdateBagOptionsC2SPacket(
+                s.getMinRolls(), s.getMaxRolls(), s.isUniqueRolls(),
+                s.getDistributionMethod(), s.getSoundEvent(), s.getOpenMessage(),
+                s.isConsumedOnUse(), s.getCooldownSeconds(), s.isShowContents(),
+                s.getCustomModelId() // Renamed
+        ));
+    }
+
+    @Override
+    public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+        this.renderBackground(guiGraphics, mouseX, mouseY, partialTick);
+        super.render(guiGraphics, mouseX, mouseY, partialTick);
+        this.renderTooltip(guiGraphics, mouseX, mouseY);
+
+        int bottomOfScreen = (this.height - this.imageHeight) / 2 + this.imageHeight;
+
+        int soundSuggestionBoxTop = this.soundEventField.getY() + this.soundEventField.getHeight() + 2;
+        int soundAvailableHeight = bottomOfScreen - soundSuggestionBoxTop;
+        this.soundEventField.renderSuggestions(guiGraphics, soundAvailableHeight);
+
+        int modelSuggestionBoxTop = this.customModelIdField.getY() + this.customModelIdField.getHeight() + 2;
+        int modelAvailableHeight = bottomOfScreen - modelSuggestionBoxTop;
+        this.customModelIdField.renderSuggestions(guiGraphics, modelAvailableHeight);
+
+        // --- RENDER ITEM PREVIEW ---
+        int previewX = this.customModelIdField.getX() + this.customModelIdField.getWidth() + 6;
+        int previewY = this.customModelIdField.getY() + 2;
+
+        if (this.previewItemStack != null) {
+            guiGraphics.renderFakeItem(this.previewItemStack, previewX, previewY);
+        }
+    }
+
+    @Override
+    protected void renderLabels(GuiGraphics guiGraphics, int mouseX, int mouseY) {
+        guiGraphics.drawString(this.font, this.title, this.titleLabelX, this.titleLabelY, 4210752, false);
+        int labelColor = 0xA0A0A0;
+        int labelYOffset = -9;
+
+        guiGraphics.drawString(font, "Number of Rolls (Min - Max)", minRollsField.getX() - this.leftPos, minRollsField.getY() - this.topPos + labelYOffset, labelColor, false);
+        int hyphenX = minRollsField.getX() + minRollsField.getWidth() + ((maxRollsField.getX() - (minRollsField.getX() + minRollsField.getWidth())) / 2) - (this.font.width("-")/2);
+        int hyphenY = minRollsField.getY() + (minRollsField.getHeight() - this.font.lineHeight) / 2;
+        guiGraphics.drawString(font, "-", hyphenX - this.leftPos, hyphenY - this.topPos, labelColor, false);
+
+        if (cooldownField.isVisible()) {
+            guiGraphics.drawString(font, "Cooldown (s)", cooldownField.getX() - this.leftPos, cooldownField.getY() - this.topPos + labelYOffset, labelColor, false);
+        }
+        guiGraphics.drawString(font, "Sound Event ID", soundEventField.getX() - this.leftPos, soundEventField.getY() - this.topPos + labelYOffset, labelColor, false);
+        guiGraphics.drawString(font, "Open Chat Message", openMessageField.getX() - this.leftPos, openMessageField.getY() - this.topPos + labelYOffset, labelColor, false);
+
+        int modelLabelX = customModelIdField.getX() - this.leftPos;
+        int modelLabelY = customModelIdField.getY() - this.topPos + labelYOffset;
+        guiGraphics.drawString(font, "Item Model ID", modelLabelX, modelLabelY, labelColor, false); // Renamed
     }
 
     private void toggleConsumed(Button button) {
@@ -105,31 +208,15 @@ public class OptionsScreen extends AbstractContainerScreen<OptionsMenu> {
         sendUpdatePacket();
     }
 
-    private Component getConsumedButtonText() {
-        return createToggleText("Consumed on Use", this.menu.session.isConsumedOnUse());
-    }
-
-    private Component getUniqueRollsButtonText() {
-        return createToggleText("Unique Rolls", this.menu.session.isUniqueRolls());
-    }
-
-    private Component getShowContentsButtonText() {
-        return createToggleText("Preview on Crouch-Use", this.menu.session.isShowContents());
-    }
-
-    private Component createToggleText(String label, boolean value) {
-        return Component.literal(label + ": " + (value ? "Enabled" : "Disabled"));
-    }
+    private Component getConsumedButtonText() { return createToggleText("Consumed on Use", this.menu.session.isConsumedOnUse()); }
+    private Component getUniqueRollsButtonText() { return createToggleText("Unique Rolls", this.menu.session.isUniqueRolls()); }
+    private Component getShowContentsButtonText() { return createToggleText("Preview on Crouch-Use", this.menu.session.isShowContents()); }
+    private Component createToggleText(String label, boolean value) { return Component.literal(label + ": " + (value ? "Enabled" : "Disabled")); }
 
     private EditBox createNumericField(int x, int y, String initialValue) {
         EditBox field = new EditBox(this.font, x, y, 70, 20, Component.empty());
         field.setValue(initialValue);
-        field.setResponder(val -> {
-            try {
-                sendUpdatePacket();
-            } catch (NumberFormatException ignored) {
-            }
-        });
+        field.setResponder(val -> { try { sendUpdatePacket(); } catch (NumberFormatException ignored) {} });
         return field;
     }
 
@@ -138,29 +225,6 @@ public class OptionsScreen extends AbstractContainerScreen<OptionsMenu> {
         field.setValue(initialValue);
         field.setResponder(val -> sendUpdatePacket());
         return field;
-    }
-
-    private void sendUpdatePacket() {
-        try {
-            this.menu.session.setMinRolls(Integer.parseInt(minRollsField.getValue()));
-        } catch (NumberFormatException ignored) {
-        }
-        try {
-            this.menu.session.setMaxRolls(Integer.parseInt(maxRollsField.getValue()));
-        } catch (NumberFormatException ignored) {
-        }
-        try {
-            this.menu.session.setCooldownSeconds(Integer.parseInt(cooldownField.getValue()));
-        } catch (NumberFormatException ignored) {
-        }
-        this.menu.session.setSoundEvent(soundEventField.getValue());
-        this.menu.session.setOpenMessage(openMessageField.getValue());
-        LootBagCreationSession s = this.menu.session;
-        PacketDistributor.sendToServer(new UpdateBagOptionsC2SPacket(
-                s.getMinRolls(), s.getMaxRolls(), s.isUniqueRolls(),
-                s.getDistributionMethod(), s.getSoundEvent(), s.getOpenMessage(),
-                s.isConsumedOnUse(), s.getCooldownSeconds(), s.isShowContents()
-        ));
     }
 
     @Override
@@ -189,46 +253,7 @@ public class OptionsScreen extends AbstractContainerScreen<OptionsMenu> {
     }
 
     @Override
-    public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
-        this.renderBackground(guiGraphics, mouseX, mouseY, partialTick);
-        super.render(guiGraphics, mouseX, mouseY, partialTick);
-        this.renderTooltip(guiGraphics, mouseX, mouseY);
-
-        // Calculate the available vertical space from the bottom of the text box to the bottom of the GUI texture
-        int topOfScreen = (this.height - this.imageHeight) / 2;
-        int bottomOfScreen = topOfScreen + this.imageHeight;
-        int suggestionBoxTop = this.soundEventField.getY() + this.soundEventField.getHeight() + 2;
-        int availableHeight = bottomOfScreen - suggestionBoxTop;
-
-        this.soundEventField.renderSuggestions(guiGraphics, availableHeight);
-    }
-
-    @Override
     protected void renderBg(GuiGraphics guiGraphics, float partialTick, int mouseX, int mouseY) {
         // The default dark overlay is fine for now
-    }
-
-    @Override
-    protected void renderLabels(GuiGraphics guiGraphics, int mouseX, int mouseY) {
-        guiGraphics.drawString(this.font, this.title, this.titleLabelX, this.titleLabelY, 4210752, false);
-        int labelColor = 0xA0A0A0;
-        int labelYOffset = -9;
-        int rollsLabelX = minRollsField.getX() - this.leftPos;
-        int rollsLabelY = minRollsField.getY() - this.topPos + labelYOffset;
-        guiGraphics.drawString(font, "Number of Rolls (Min - Max)", rollsLabelX, rollsLabelY, labelColor, false);
-        int hyphenX = minRollsField.getX() + minRollsField.getWidth() + ((maxRollsField.getX() - (minRollsField.getX() + minRollsField.getWidth())) / 2) - (this.font.width("-") / 2);
-        int hyphenY = minRollsField.getY() + (minRollsField.getHeight() - this.font.lineHeight) / 2;
-        guiGraphics.drawString(font, "-", hyphenX - this.leftPos, hyphenY - this.topPos, labelColor, false);
-        if (cooldownField.isVisible()) {
-            int cooldownLabelX = cooldownField.getX() - this.leftPos;
-            int cooldownLabelY = cooldownField.getY() - this.topPos + labelYOffset;
-            guiGraphics.drawString(font, "Cooldown (s)", cooldownLabelX, cooldownLabelY, labelColor, false);
-        }
-        int soundLabelX = soundEventField.getX() - this.leftPos;
-        int soundLabelY = soundEventField.getY() - this.topPos + labelYOffset;
-        guiGraphics.drawString(font, "Sound Event ID", soundLabelX, soundLabelY, labelColor, false);
-        int messageLabelX = openMessageField.getX() - this.leftPos;
-        int messageLabelY = openMessageField.getY() - this.topPos + labelYOffset;
-        guiGraphics.drawString(font, "Open Chat Message", messageLabelX, messageLabelY, labelColor, false);
     }
 }

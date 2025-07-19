@@ -3,10 +3,10 @@ package net.jigokusaru.lootfoundry.network;
 import net.jigokusaru.lootfoundry.network.packet.AddLootEntryC2SPacket;
 import net.jigokusaru.lootfoundry.network.packet.OpenMenuC2SPacket;
 import net.jigokusaru.lootfoundry.network.packet.RemoveLootEntryC2SPacket;
-// --- ADD THIS IMPORT ---
+import net.jigokusaru.lootfoundry.network.packet.SaveBagC2SPacket;
+import net.jigokusaru.lootfoundry.network.packet.UpdateBagDetailsC2SPacket;
 import net.jigokusaru.lootfoundry.network.packet.UpdateBagOptionsC2SPacket;
 import net.jigokusaru.lootfoundry.network.packet.UpdateLootEntryC2SPacket;
-import net.jigokusaru.lootfoundry.network.packet.UpdateBagDetailsC2SPacket;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 
 /**
@@ -15,6 +15,8 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 public class NetworkManager {
 
     public static void register(PayloadRegistrar registrar) {
+        // THE FIX: Ensure all C2S packets are registered here. The 'OpenMenuC2SPacket' was likely missing.
+
         // Register the packet that handles opening different menu screens.
         registrar.playToServer(OpenMenuC2SPacket.TYPE, OpenMenuC2SPacket.STREAM_CODEC, OpenMenuC2SPacket::handle);
 
@@ -30,8 +32,10 @@ public class NetworkManager {
         // Register the packet for updating an existing loot entry.
         registrar.playToServer(UpdateLootEntryC2SPacket.TYPE, UpdateLootEntryC2SPacket.STREAM_CODEC, UpdateLootEntryC2SPacket::handle);
 
-        // --- ADD THIS LINE ---
         // Register the packet for updating the bag's options from the options screen.
         registrar.playToServer(UpdateBagOptionsC2SPacket.TYPE, UpdateBagOptionsC2SPacket.STREAM_CODEC, UpdateBagOptionsC2SPacket::handle);
+
+        // Register the packet for saving the current bag configuration.
+        registrar.playToServer(SaveBagC2SPacket.TYPE, SaveBagC2SPacket.STREAM_CODEC, SaveBagC2SPacket::handle);
     }
 }

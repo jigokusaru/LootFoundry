@@ -15,6 +15,9 @@ import java.util.UUID;
 public abstract class LootEntry {
     protected final UUID id;
     protected int weight;
+    // --- THE FIX: The 'transient' keyword has been removed from this line. ---
+    // This ensures the 'type' is saved in the JSON's "data" block, so it's
+    // correctly loaded back into the object, preventing the null pointer crash.
     protected final BuilderType type;
 
     protected LootEntry(UUID id, int weight, BuilderType type) {
@@ -40,7 +43,7 @@ public abstract class LootEntry {
     }
 
     public abstract void writeToBuffer(RegistryFriendlyByteBuf buffer);
-    
+
     public static LootEntry fromBuffer(RegistryFriendlyByteBuf buffer) {
         BuilderType type = buffer.readEnum(BuilderType.class); // Read type to know which factory method to call
         return switch (type) {

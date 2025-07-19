@@ -3,6 +3,7 @@ package net.jigokusaru.lootfoundry.ui.screen;
 import net.jigokusaru.lootfoundry.LootFoundry;
 import net.jigokusaru.lootfoundry.network.MenuType;
 import net.jigokusaru.lootfoundry.network.packet.OpenMenuC2SPacket;
+import net.jigokusaru.lootfoundry.network.packet.SaveBagC2SPacket;
 import net.jigokusaru.lootfoundry.network.packet.UpdateBagDetailsC2SPacket;
 import net.jigokusaru.lootfoundry.ui.menus.MainMenu;
 import net.minecraft.client.gui.GuiGraphics;
@@ -31,10 +32,6 @@ public class MainScreen extends AbstractContainerScreen<MainMenu> {
         this.imageWidth = 176;
         this.imageHeight = 198;
         this.titleLabelY = 6;
-
-        // THE FIX: Manually set the inventory label's Y position.
-        // The default is 104, which is a bit too high for our custom layout.
-        // 106 places it neatly above the inventory slots which start at Y=116.
         this.inventoryLabelY = 106;
     }
 
@@ -70,14 +67,15 @@ public class MainScreen extends AbstractContainerScreen<MainMenu> {
 
         // "Save" Button (Half Width)
         this.addRenderableWidget(Button.builder(Component.literal("Save"), button -> {
-            LootFoundry.LOGGER.info("Save button clicked! (Not implemented yet)");
-            this.minecraft.player.displayClientMessage(Component.literal("Save not implemented!"), true);
+            // THE FIX: Send the save packet and close the screen.
+            // The server will send a chat message to confirm success or failure.
+            PacketDistributor.sendToServer(new SaveBagC2SPacket());
+            this.onClose();
         }).bounds(leftX, row2Y, halfWidth, 20).build());
+
 
         // "Options" Button (Half Width)
         this.addRenderableWidget(Button.builder(Component.literal("Options"), button -> {
-            // This sends the packet to the server. The server will log a message,
-            // confirming the button is wired up correctly.
             PacketDistributor.sendToServer(new OpenMenuC2SPacket(MenuType.OPTIONS, null));
         }).bounds(rightX, row2Y, halfWidth, 20).build());
 
@@ -110,14 +108,35 @@ public class MainScreen extends AbstractContainerScreen<MainMenu> {
         this.renderTooltip(guiGraphics, mouseX, mouseY);
     }
 
+    // --- START OF FIX ---
+
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == 256) { // 256 is the keycode for ESC
+        // Handle ESC key first to ensure the screen can always be closed.
+        if (keyCode == 256) {
             this.onClose();
             return true;
         }
+
+        // If a text box is focused, let it handle the key press and then consume the event.
+        // This is what prevents the screen from closing when you type 'E'.
+        if (this.getFocused() instanceof EditBox) {
+            return this.getFocused().keyPressed(keyCode, scanCode, modifiers) || true;
+        }
+
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
+
+    @Override
+    public boolean charTyped(char pCodePoint, int pModifiers) {
+        // This ensures that typed characters are correctly passed to the focused text box.
+        if (this.getFocused() != null && this.getFocused().charTyped(pCodePoint, pModifiers)) {
+            return true;
+        }
+        return super.charTyped(pCodePoint, pModifiers);
+    }
+
+    // --- END OF FIX ---
 
     @Override
     protected void renderLabels(GuiGraphics guiGraphics, int mouseX, int mouseY) {

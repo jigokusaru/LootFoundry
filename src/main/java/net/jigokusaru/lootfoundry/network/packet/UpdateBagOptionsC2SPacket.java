@@ -20,15 +20,21 @@ public record UpdateBagOptionsC2SPacket(
         String openMessage,
         boolean consumedOnUse,
         int cooldownSeconds,
-        boolean showContents
+        boolean showContents,
+        String customModelId
 ) implements CustomPacketPayload {
 
-    public static final Type<UpdateBagOptionsC2SPacket> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(LootFoundry.MODID, "update_bag_options"));
     public static final StreamCodec<RegistryFriendlyByteBuf, UpdateBagOptionsC2SPacket> STREAM_CODEC = StreamCodec.of(
-            UpdateBagOptionsC2SPacket::encode, UpdateBagOptionsC2SPacket::decode);
+            (buf, packet) -> packet.write(buf),
+            UpdateBagOptionsC2SPacket::new
+    );
+    // THE FIX: Changed ResourceLocation.of to ResourceLocation.fromNamespaceAndPath
+    public static final CustomPacketPayload.Type<UpdateBagOptionsC2SPacket> TYPE = new CustomPacketPayload.Type<>(
+            ResourceLocation.fromNamespaceAndPath(LootFoundry.MODID, "update_bag_options")
+    );
 
-    private static UpdateBagOptionsC2SPacket decode(RegistryFriendlyByteBuf buf) {
-        return new UpdateBagOptionsC2SPacket(
+    public UpdateBagOptionsC2SPacket(RegistryFriendlyByteBuf buf) {
+        this(
                 buf.readVarInt(),
                 buf.readVarInt(),
                 buf.readBoolean(),
@@ -37,24 +43,22 @@ public record UpdateBagOptionsC2SPacket(
                 buf.readUtf(),
                 buf.readBoolean(),
                 buf.readVarInt(),
-                buf.readBoolean()
+                buf.readBoolean(),
+                buf.readUtf()
         );
     }
 
-    // THE FIX:
-    // This method now has the correct static signature (Buffer, Packet) -> void
-    // that the StreamEncoder functional interface requires.
-    private static void encode(RegistryFriendlyByteBuf buf, UpdateBagOptionsC2SPacket packet) {
-        // We now use the 'packet' parameter to get the data to write.
-        buf.writeVarInt(packet.minRolls());
-        buf.writeVarInt(packet.maxRolls());
-        buf.writeBoolean(packet.uniqueRolls());
-        buf.writeEnum(packet.distributionMethod());
-        buf.writeUtf(packet.soundEvent());
-        buf.writeUtf(packet.openMessage());
-        buf.writeBoolean(packet.consumedOnUse());
-        buf.writeVarInt(packet.cooldownSeconds());
-        buf.writeBoolean(packet.showContents());
+    public void write(RegistryFriendlyByteBuf buf) {
+        buf.writeVarInt(minRolls);
+        buf.writeVarInt(maxRolls);
+        buf.writeBoolean(uniqueRolls);
+        buf.writeEnum(distributionMethod);
+        buf.writeUtf(soundEvent);
+        buf.writeUtf(openMessage);
+        buf.writeBoolean(consumedOnUse);
+        buf.writeVarInt(cooldownSeconds);
+        buf.writeBoolean(showContents);
+        buf.writeUtf(customModelId);
     }
 
     @Override
@@ -62,22 +66,21 @@ public record UpdateBagOptionsC2SPacket(
         return TYPE;
     }
 
-    public void handle(final IPayloadContext context) {
+    public static void handle(UpdateBagOptionsC2SPacket packet, IPayloadContext context) {
         context.enqueueWork(() -> {
             ServerPlayer player = (ServerPlayer) context.player();
-            if (player == null) return;
-
             LootBagCreationSession session = LootBagDataManager.getInstance().getOrCreatePlayerSession(player);
-            // The handle method uses the record's automatic getters, which is correct.
-            session.setMinRolls(minRolls);
-            session.setMaxRolls(maxRolls);
-            session.setUniqueRolls(uniqueRolls);
-            session.setDistributionMethod(distributionMethod);
-            session.setSoundEvent(soundEvent);
-            session.setOpenMessage(openMessage);
-            session.setConsumedOnUse(consumedOnUse);
-            session.setCooldownSeconds(cooldownSeconds);
-            session.setShowContents(showContents);
+
+            session.setMinRolls(packet.minRolls);
+            session.setMaxRolls(packet.maxRolls);
+            session.setUniqueRolls(packet.uniqueRolls);
+            session.setDistributionMethod(packet.distributionMethod);
+            session.setSoundEvent(packet.soundEvent);
+            session.setOpenMessage(packet.openMessage);
+            session.setConsumedOnUse(packet.consumedOnUse);
+            session.setCooldownSeconds(packet.cooldownSeconds);
+            session.setShowContents(packet.showContents);
+            session.setCustomModelId(packet.customModelId);
         });
     }
 }
