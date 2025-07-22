@@ -1,13 +1,23 @@
 package net.jigokusaru.lootfoundry.data;
 
+import net.jigokusaru.lootfoundry.network.MenuType;
+import net.jigokusaru.lootfoundry.ui.menus.LootMenu;
+import net.jigokusaru.lootfoundry.ui.menus.MainMenu;
+import net.jigokusaru.lootfoundry.ui.menus.OptionsMenu;
 import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.MenuProvider;
+import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-public class LootBagCreationSession {
+// THE FIX: Implement the MenuProvider interface
+public class LootBagCreationSession implements MenuProvider {
     private final UUID owner;
     private String bagName;
     private String bagId;
@@ -25,6 +35,9 @@ public class LootBagCreationSession {
     private boolean showContents;
     private String customModelId;
 
+    // This is not saved to disk or sent over the network with the session data.
+    private MenuType currentMenuType;
+
     // Main constructor for new sessions
     public LootBagCreationSession(Player player) {
         this.owner = player.getUUID();
@@ -39,9 +52,9 @@ public class LootBagCreationSession {
         this.openMessage = "";
         this.consumedOnUse = true;
         this.cooldownSeconds = 0;
-        this.showContents = false;
-        // --- THE FIX: Default to an empty string to signify no custom model. ---
+        this.showContents = true;
         this.customModelId = "";
+        this.currentMenuType = MenuType.MAIN; // Default to main menu
     }
 
     // Constructor for loading from a definition
@@ -60,6 +73,7 @@ public class LootBagCreationSession {
         this.cooldownSeconds = definition.getCooldownSeconds();
         this.showContents = definition.isShowContents();
         this.customModelId = definition.getCustomModelId();
+        this.currentMenuType = MenuType.MAIN; // Default to main menu
     }
 
     // --- Private constructor for network deserialization ---
@@ -78,7 +92,34 @@ public class LootBagCreationSession {
         this.cooldownSeconds = cooldownSeconds;
         this.showContents = showContents;
         this.customModelId = customModelId;
+        // Note: currentMenuType is not part of the network data for the session itself.
     }
+
+    // --- MenuProvider Implementation ---
+
+    @NotNull
+    @Override
+    public Component getDisplayName() {
+        // Return a dynamic title based on which menu we are opening.
+        return switch (this.currentMenuType) {
+            case LOOT_EDITOR -> Component.literal("Edit Loot");
+            case OPTIONS -> Component.literal("Bag Options");
+            default -> Component.literal("Loot Bag Editor");
+        };
+    }
+
+    @NotNull
+    @Override
+    public AbstractContainerMenu createMenu(int containerId, @NotNull Inventory playerInventory, @NotNull Player player) {
+        // Use the currentMenuType to return the correct menu instance.
+        // We pass `this` (the session itself) to the menu constructor.
+        return switch (this.currentMenuType) {
+            case LOOT_EDITOR -> new LootMenu(containerId, playerInventory, this);
+            case OPTIONS -> new OptionsMenu(containerId, playerInventory, this);
+            default -> new MainMenu(containerId, playerInventory, this); // MAIN and any other case
+        };
+    }
+
 
     // --- Getters and Setters ---
     public UUID getOwner() { return owner; }
@@ -107,6 +148,9 @@ public class LootBagCreationSession {
     public void setShowContents(boolean showContents) { this.showContents = showContents; }
     public String getCustomModelId() { return customModelId; }
     public void setCustomModelId(String customModelId) { this.customModelId = customModelId; }
+
+    public MenuType getCurrentMenuType() { return currentMenuType; }
+    public void setCurrentMenuType(MenuType currentMenuType) { this.currentMenuType = currentMenuType; }
 
     /**
      * Adds a new loot entry to this session's list.
@@ -153,7 +197,6 @@ public class LootBagCreationSession {
      */
     public void writeToBuffer(RegistryFriendlyByteBuf buffer) {
         buffer.writeUUID(this.owner);
-        // --- FIX: Add null checks to all string writes to prevent crashes ---
         buffer.writeUtf(this.bagName != null ? this.bagName : "New Loot Bag");
         buffer.writeUtf(this.bagId != null ? this.bagId : "new_loot_bag");
 

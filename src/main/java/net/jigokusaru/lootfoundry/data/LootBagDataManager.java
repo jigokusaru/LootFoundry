@@ -12,6 +12,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.storage.LevelResource;
+import org.jetbrains.annotations.Nullable;
 
 import java.io.FileWriter;
 import java.io.IOException;
@@ -41,7 +42,18 @@ public class LootBagDataManager {
         return this.playerSessions.computeIfAbsent(player.getUUID(), (uuid) -> new LootBagCreationSession(player));
     }
 
-    // --- START OF FIX ---
+    // --- THIS IS THE FIX ---
+    /**
+     * Gets a player's active creation session, if one exists.
+     * @param player The player whose session to retrieve.
+     * @return The session, or null if the player does not have an active session.
+     */
+    @Nullable
+    public LootBagCreationSession getPlayerSession(ServerPlayer player) {
+        return this.playerSessions.get(player.getUUID());
+    }
+    // --- END OF FIX ---
+
     /**
      * Creates a new, blank session for a player, overwriting any existing session.
      * This is used by the /lf create command.
@@ -53,7 +65,6 @@ public class LootBagDataManager {
         this.playerSessions.put(player.getUUID(), session);
         return session;
     }
-    // --- END OF FIX ---
 
     /**
      * Creates a new session for a player based on a loaded definition, replacing any existing session.

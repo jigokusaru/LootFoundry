@@ -100,6 +100,8 @@ public class AutoCompleteEditBox extends EditBox {
         } else {
             this.lastRenderedSuggestionCount = 0;
         }
+
+
     }
 
     @Override

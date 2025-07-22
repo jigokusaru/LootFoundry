@@ -50,25 +50,5 @@ public record OpenMenuC2SPacket(MenuType menuType, @Nullable String bagId) imple
     /**
      * This is the logic that runs on the server when it receives this packet.
      */
-    public void handle(final IPayloadContext context) {
-        context.enqueueWork(() -> {
-            ServerPlayer player = (ServerPlayer) context.player();
-            if (player == null) return;
-
-            LootBagDataManager dataManager = LootBagDataManager.getInstance();
-            LootBagCreationSession session = dataManager.getOrCreatePlayerSession(player);
-
-            switch (this.menuType) {
-                case MAIN -> player.openMenu(new MainMenuProvider(session), session::writeToBuffer);
-                case LOOT_EDITOR -> player.openMenu(new LootMenuProvider(session), session::writeToBuffer);
-                case OPTIONS -> {
-                    var menuProvider = new SimpleMenuProvider(
-                            (id, inv, p) -> new OptionsMenu(id, inv, session),
-                            Component.literal("Loot Foundry Options")
-                    );
-                    player.openMenu(menuProvider, session::writeToBuffer);
-                }
-            }
-        });
-    }
+   
 }

@@ -1,0 +1,32 @@
+# This is the mod's descriptor file. It's required for the mod to load correctly.
+modLoader="javafml" # Specifies the mod loader.
+loaderVersion="[1,)" # This is a version range for the loader.
+license="All Rights Reserved"
+#issueTrackerURL="https://github.com/jigokusaru/lootfoundry/issues" # Optional: Link to your issue tracker.
+
+[[mods]]
+modId="lootfoundry"
+version="1.0.0"
+displayName="Loot Foundry"
+#logoFile="logo.png" # Optional: A logo file in the root of your resources.
+description='''
+A mod for creating custom loot bags and items.
+'''
+
+# This section defines the dependencies for your mod.
+# It's crucial for ensuring your mod loads in the right environment.
+[[dependencies.lootfoundry]]
+modId="neoforge"
+mandatory=true
+# CORRECTED: This now matches your gradle.properties neo_version_range
+versionRange="[21,)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.lootfoundry]]
+modId="minecraft"
+mandatory=true
+# CORRECTED: This now matches your gradle.properties minecraft_version
+versionRange="[1.21.1,)"
+ordering="NONE"
+side="BOTH"

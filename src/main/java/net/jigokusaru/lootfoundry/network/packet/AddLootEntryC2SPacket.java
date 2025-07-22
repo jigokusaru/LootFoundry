@@ -30,14 +30,5 @@ public record AddLootEntryC2SPacket(LootEntry entry) implements CustomPacketPayl
     public Type<? extends CustomPacketPayload> type() {
         return TYPE;
     }
-
-    public static void handle(final AddLootEntryC2SPacket packet, final IPayloadContext context) {
-        context.enqueueWork(() -> {
-            ServerPlayer player = (ServerPlayer) context.player();
-            LootBagCreationSession session = LootBagDataManager.getInstance().getOrCreatePlayerSession(player);
-            if (session != null) {
-                session.addLootEntry(packet.entry());
-            }
-        });
-    }
+    
 }

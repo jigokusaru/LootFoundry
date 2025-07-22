@@ -22,11 +22,5 @@ public record SaveBagC2SPacket() implements CustomPacketPayload {
     public Type<? extends CustomPacketPayload> type() {
         return TYPE;
     }
-
-    public static void handle(SaveBagC2SPacket packet, IPayloadContext context) {
-        if (context.player() instanceof ServerPlayer serverPlayer) {
-            // Tell the data manager to save this player's session
-            LootBagDataManager.getInstance().saveSessionAsNewBag(serverPlayer);
-        }
-    }
+    
 }

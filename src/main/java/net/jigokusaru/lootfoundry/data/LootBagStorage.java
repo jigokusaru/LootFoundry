@@ -11,8 +11,10 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.storage.LevelResource;
 
+import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.Writer; // ADDED IMPORT
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
@@ -30,6 +32,11 @@ public class LootBagStorage {
         return server.getWorldPath(LevelResource.ROOT).resolve("data").resolve(LootFoundry.MODID).resolve("bags");
     }
 
+    private static File getBagFile(MinecraftServer server, String bagId) {
+        Path filePath = getBagsDirectory(server).resolve(bagId + ".json");
+        return filePath.toFile();
+    }
+
     /**
      * Loads a single loot bag definition from its JSON file.
      * @param server The Minecraft server instance.
@@ -37,8 +44,8 @@ public class LootBagStorage {
      * @return An Optional containing the loaded definition, or empty if not found or an error occurs.
      */
     public static Optional<LootBagDefinition> loadBagDefinition(MinecraftServer server, String bagId) {
-        Path filePath = getBagsDirectory(server).resolve(bagId + ".json");
-        if (!Files.exists(filePath)) {
+        File bagFile = getBagFile(server, bagId);
+        if (!bagFile.exists()) {
             return Optional.empty();
         }
 
@@ -49,7 +56,7 @@ public class LootBagStorage {
                 .registerTypeAdapterFactory(new LootEntryAdapterFactory())
                 .create();
 
-        try (FileReader reader = new FileReader(filePath.toFile())) {
+        try (FileReader reader = new FileReader(bagFile)) {
             LootBagDefinition definition = gson.fromJson(reader, LootBagDefinition.class);
             return Optional.ofNullable(definition);
         } catch (Exception e) {
@@ -57,6 +64,46 @@ public class LootBagStorage {
             return Optional.empty();
         }
     }
+
+    // --- THIS IS THE FIX ---
+    /**
+     * Saves a player's creation session as a persistent loot bag definition file.
+     * @param server The Minecraft server instance.
+     * @param session The player's session data to save.
+     * @return true if the save was successful, false otherwise.
+     */
+    public static boolean saveBagDefinition(MinecraftServer server, LootBagCreationSession session) {
+        if (session == null || session.getBagId() == null || session.getBagId().isBlank()) {
+            LootFoundry.LOGGER.warn("Attempted to save a loot bag with a null or blank ID.");
+            return false;
+        }
+
+        LootBagDefinition definition = new LootBagDefinition(session);
+
+        RegistryAccess registryAccess = server.registryAccess();
+        Gson gson = new GsonBuilder()
+                .setPrettyPrinting()
+                .registerTypeAdapterFactory(OptionalTypeAdapter.FACTORY)
+                .registerTypeAdapter(ItemStack.class, new ItemStackAdapter(registryAccess))
+                .registerTypeAdapterFactory(new LootEntryAdapterFactory())
+                .create();
+
+        try {
+            Path dataDir = getBagsDirectory(server);
+            Files.createDirectories(dataDir);
+            Path filePath = dataDir.resolve(definition.getBagId() + ".json");
+
+            try (Writer writer = new java.io.FileWriter(filePath.toFile())) {
+                gson.toJson(definition, writer);
+                LootFoundry.LOGGER.info("Successfully saved loot bag definition: {}", filePath);
+                return true;
+            }
+        } catch (Exception e) {
+            LootFoundry.LOGGER.error("Failed to save loot bag definition for bag ID: {}", session.getBagId(), e);
+            return false;
+        }
+    }
+    // --- END OF FIX ---
 
     /**
      * Scans the loot bag directory and returns a list of all available bag IDs.
@@ -79,5 +126,17 @@ public class LootBagStorage {
             LootFoundry.LOGGER.error("Could not read loot bag directory for command suggestions", e);
             return Collections.emptyList();
         }
+    }
+    public static boolean deleteBagDefinition(MinecraftServer server, String bagId) {
+        File bagFile = getBagFile(server, bagId);
+        if (bagFile != null && bagFile.exists()) {
+            try {
+                return Files.deleteIfExists(bagFile.toPath());
+            } catch (IOException e) {
+                LootFoundry.LOGGER.error("Failed to delete loot bag definition file: {}", bagFile.getAbsolutePath(), e);
+                return false;
+            }
+        }
+        return false; // File didn't exist
     }
 }

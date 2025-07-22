@@ -10,8 +10,7 @@ public class ModItems {
     public static final DeferredRegister<Item> ITEMS =
             DeferredRegister.create(Registries.ITEM, LootFoundry.MODID);
 
-    // This is now a simple item registration.
-    // The renderer is attached in LootBagItem.java, which is the correct, stable approach.
+    // Simple registration. The item itself will handle attaching the renderer.
     public static final DeferredHolder<Item, Item> LOOT_BAG = ITEMS.register("loot_bag",
             () -> new LootBagItem(new Item.Properties())
     );

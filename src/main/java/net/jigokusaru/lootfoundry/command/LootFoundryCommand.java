@@ -16,10 +16,8 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.commands.arguments.EntityArgument;
-import net.minecraft.core.component.DataComponentType;
-import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.component.DataComponents; // ADDED IMPORT
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.MenuProvider;
 import net.minecraft.world.entity.player.Inventory;
@@ -39,8 +37,28 @@ public class LootFoundryCommand {
                 .then(createCreateCommand())
                 .then(createEditCommand())
                 .then(createGiveCommand())
-                .then(createSaveCommand())
+                .then(createDeleteCommand())
         );
+    }
+
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> createDeleteCommand() {
+        return Commands.literal("delete")
+                .then(Commands.argument("bagId", StringArgumentType.string())
+                        .suggests((context, builder) -> SharedSuggestionProvider.suggest(
+                                LootBagStorage.getAllBagIds(context.getSource().getServer()), builder
+                        ))
+                        .executes(context -> {
+                            String bagId = StringArgumentType.getString(context, "bagId");
+                            boolean success = LootBagStorage.deleteBagDefinition(context.getSource().getServer(), bagId);
+
+                            if (success) {
+                                context.getSource().sendSuccess(() -> Component.literal("Successfully deleted loot bag: " + bagId), true);
+                                return 1;
+                            } else {
+                                context.getSource().sendFailure(Component.literal("Could not find or delete loot bag: " + bagId));
+                                return 0;
+                            }
+                        }));
     }
 
     private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> createCreateCommand() {
@@ -101,15 +119,6 @@ public class LootFoundryCommand {
                         }));
     }
 
-    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> createSaveCommand() {
-        return Commands.literal("save")
-                .executes(context -> {
-                    ServerPlayer player = context.getSource().getPlayerOrException();
-                    LootBagDataManager.getInstance().saveSessionAsNewBag(player);
-                    return 1;
-                });
-    }
-
     private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> createGiveCommand() {
         return Commands.literal("give")
                 .then(Commands.argument("players", EntityArgument.players())
@@ -142,7 +151,6 @@ public class LootFoundryCommand {
         if (definition.getCustomModelId() != null && !definition.getCustomModelId().isBlank()) {
             String customModelId = definition.getCustomModelId();
             stack.set(ModDataComponents.CUSTOM_MODEL_ID.get(), customModelId);
-            // --- DEBUG LOGGING ---
             LootFoundry.LOGGER.info("[COMMAND DEBUG] Attaching custom model ID '{}' to loot bag '{}'", customModelId, bagId);
         } else {
             LootFoundry.LOGGER.info("[COMMAND DEBUG] No custom model ID found for loot bag '{}'. Using default.", bagId);
@@ -150,10 +158,9 @@ public class LootFoundryCommand {
 
         String bagName = definition.getBagName();
         if (bagName != null && !bagName.isBlank()) {
-            DataComponentType<?> rawCustomNameType = BuiltInRegistries.DATA_COMPONENT_TYPE.get(ResourceLocation.withDefaultNamespace("custom_name"));
-            if (rawCustomNameType != null) {
-                stack.set((DataComponentType<Component>) rawCustomNameType, Component.literal(bagName));
-            }
+            // --- THIS IS THE FIX ---
+            // Replaced the unsafe registry lookup and cast with a direct, type-safe reference.
+            stack.set(DataComponents.CUSTOM_NAME, Component.literal(bagName));
         }
 
         String feedbackName = (bagName != null && !bagName.isBlank()) ? bagName : bagId;

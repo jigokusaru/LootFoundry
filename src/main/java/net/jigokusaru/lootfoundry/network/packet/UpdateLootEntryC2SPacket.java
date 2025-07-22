@@ -23,13 +23,5 @@ public record UpdateLootEntryC2SPacket(LootEntry updatedEntry) implements Custom
         return TYPE;
     }
 
-    public static void handle(final UpdateLootEntryC2SPacket packet, final IPayloadContext context) {
-        context.enqueueWork(() -> {
-            ServerPlayer player = (ServerPlayer) context.player();
-            LootBagCreationSession session = LootBagDataManager.getInstance().getOrCreatePlayerSession(player);
-            if (session != null) {
-                session.updateLootEntry(packet.updatedEntry());
-            }
-        });
-    }
+
 }

@@ -65,22 +65,4 @@ public record UpdateBagOptionsC2SPacket(
     public Type<? extends CustomPacketPayload> type() {
         return TYPE;
     }
-
-    public static void handle(UpdateBagOptionsC2SPacket packet, IPayloadContext context) {
-        context.enqueueWork(() -> {
-            ServerPlayer player = (ServerPlayer) context.player();
-            LootBagCreationSession session = LootBagDataManager.getInstance().getOrCreatePlayerSession(player);
-
-            session.setMinRolls(packet.minRolls);
-            session.setMaxRolls(packet.maxRolls);
-            session.setUniqueRolls(packet.uniqueRolls);
-            session.setDistributionMethod(packet.distributionMethod);
-            session.setSoundEvent(packet.soundEvent);
-            session.setOpenMessage(packet.openMessage);
-            session.setConsumedOnUse(packet.consumedOnUse);
-            session.setCooldownSeconds(packet.cooldownSeconds);
-            session.setShowContents(packet.showContents);
-            session.setCustomModelId(packet.customModelId);
-        });
-    }
 }

@@ -1,12 +1,6 @@
 package net.jigokusaru.lootfoundry.network;
 
-import net.jigokusaru.lootfoundry.network.packet.AddLootEntryC2SPacket;
-import net.jigokusaru.lootfoundry.network.packet.OpenMenuC2SPacket;
-import net.jigokusaru.lootfoundry.network.packet.RemoveLootEntryC2SPacket;
-import net.jigokusaru.lootfoundry.network.packet.SaveBagC2SPacket;
-import net.jigokusaru.lootfoundry.network.packet.UpdateBagDetailsC2SPacket;
-import net.jigokusaru.lootfoundry.network.packet.UpdateBagOptionsC2SPacket;
-import net.jigokusaru.lootfoundry.network.packet.UpdateLootEntryC2SPacket;
+import net.jigokusaru.lootfoundry.network.packet.*;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 
 /**
@@ -14,28 +8,24 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
  */
 public class NetworkManager {
 
+    /**
+     * Registers all network payloads.
+     * This method is called on both the client and the server, ensuring that all channel
+     * names are known on both sides. The handlers themselves are side-specific.
+     */
     public static void register(PayloadRegistrar registrar) {
-        // THE FIX: Ensure all C2S packets are registered here. The 'OpenMenuC2SPacket' was likely missing.
+        // --- Client-to-Server (C2S) Packets ---
+        // Now pointing to the safe handlers in ServerPacketHandlers
+        registrar.playToServer(OpenMenuC2SPacket.TYPE, OpenMenuC2SPacket.STREAM_CODEC, ServerPacketHandlers::handleOpenMenu);
+        registrar.playToServer(UpdateBagDetailsC2SPacket.TYPE, UpdateBagDetailsC2SPacket.STREAM_CODEC, ServerPacketHandlers::handleUpdateBagDetails);
+        registrar.playToServer(AddLootEntryC2SPacket.TYPE, AddLootEntryC2SPacket.STREAM_CODEC, ServerPacketHandlers::handleAddLootEntry);
+        registrar.playToServer(RemoveLootEntryC2SPacket.TYPE, RemoveLootEntryC2SPacket.STREAM_CODEC, ServerPacketHandlers::handleRemoveLootEntry);
+        registrar.playToServer(UpdateLootEntryC2SPacket.TYPE, UpdateLootEntryC2SPacket.STREAM_CODEC, ServerPacketHandlers::handleUpdateLootEntry);
+        registrar.playToServer(UpdateBagOptionsC2SPacket.TYPE, UpdateBagOptionsC2SPacket.STREAM_CODEC, ServerPacketHandlers::handleUpdateBagOptions);
+        registrar.playToServer(SaveBagC2SPacket.TYPE, SaveBagC2SPacket.STREAM_CODEC, ServerPacketHandlers::handleSaveBag);
 
-        // Register the packet that handles opening different menu screens.
-        registrar.playToServer(OpenMenuC2SPacket.TYPE, OpenMenuC2SPacket.STREAM_CODEC, OpenMenuC2SPacket::handle);
-
-        // Register the packet for updating the bag's name from the main screen.
-        registrar.playToServer(UpdateBagDetailsC2SPacket.TYPE, UpdateBagDetailsC2SPacket.STREAM_CODEC, UpdateBagDetailsC2SPacket::handle);
-
-        // Register the packet for adding a new loot entry from the editor.
-        registrar.playToServer(AddLootEntryC2SPacket.TYPE, AddLootEntryC2SPacket.STREAM_CODEC, AddLootEntryC2SPacket::handle);
-
-        // Register the packet for removing a loot entry from the list.
-        registrar.playToServer(RemoveLootEntryC2SPacket.TYPE, RemoveLootEntryC2SPacket.STREAM_CODEC, RemoveLootEntryC2SPacket::handle);
-
-        // Register the packet for updating an existing loot entry.
-        registrar.playToServer(UpdateLootEntryC2SPacket.TYPE, UpdateLootEntryC2SPacket.STREAM_CODEC, UpdateLootEntryC2SPacket::handle);
-
-        // Register the packet for updating the bag's options from the options screen.
-        registrar.playToServer(UpdateBagOptionsC2SPacket.TYPE, UpdateBagOptionsC2SPacket.STREAM_CODEC, UpdateBagOptionsC2SPacket::handle);
-
-        // Register the packet for saving the current bag configuration.
-        registrar.playToServer(SaveBagC2SPacket.TYPE, SaveBagC2SPacket.STREAM_CODEC, SaveBagC2SPacket::handle);
+        // --- Server-to-Client (S2C) Packets ---
+        registrar.playToClient(OpenPreviewScreenS2CPacket.TYPE, OpenPreviewScreenS2CPacket.STREAM_CODEC, ClientPacketHandlers::handleOpenPreviewScreen);
+        registrar.playToClient(OpenRewardScreenS2CPacket.TYPE, OpenRewardScreenS2CPacket.STREAM_CODEC, ClientPacketHandlers::handleOpenRewardScreen);
     }
 }
